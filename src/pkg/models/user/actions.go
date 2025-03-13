@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// creates a user, nothing to do with the auth
 func CreateUser(userAuth *UserAuth) User {
 	hash, err := bcrypt.GenerateFromPassword([]byte(userAuth.Password), bcrypt.DefaultCost)
 	errs.Invariant(err == nil, "can't hash password")
@@ -19,7 +20,7 @@ func CreateUser(userAuth *UserAuth) User {
 	user := User{
 		Email:        userAuth.Email,
 		PasswordHash: string(hash),
-		ActiveTokens: []jwt.JWT{},
+		ActiveTokens: []jwt.Token{},
 	}
 
 	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
@@ -33,6 +34,7 @@ func CreateUser(userAuth *UserAuth) User {
 	return user
 }
 
+// get a user by their ID
 func GetUserByID(userID primitive.ObjectID) *User {
 	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
 
@@ -45,7 +47,7 @@ func GetUserByID(userID primitive.ObjectID) *User {
 	return &user
 }
 
-// only check password
+// only check password, no JWT
 func AuthenticateUser(userAuth *UserAuth) (bool, *User) {
 	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
 
@@ -63,13 +65,10 @@ func AuthenticateUser(userAuth *UserAuth) (bool, *User) {
 	return true, &user
 }
 
-func (user *User) AddActiveToken(token string) {
+func (user *User) AddActiveToken(jwt *jwt.Token) {
 	user = GetUserByID(user.ID)
 
-	user.ActiveTokens = append(user.ActiveTokens, jwt.JWT{
-		Token:     token,
-		ExpiresAt: time.Now().Add(time.Hour * 24).Unix(),
-	})
+	user.ActiveTokens = append(user.ActiveTokens, *jwt)
 
 	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
 	_, err := collection.UpdateOne(
@@ -80,18 +79,19 @@ func (user *User) AddActiveToken(token string) {
 	errs.Invariant(err == nil, "can't update user")
 }
 
+// checks based on a string, thats why we keep them
 // we automatically remove expired tokens
 func (user *User) IsTokenActive(token string) bool {
 	user = GetUserByID(user.ID)
 
 	now := time.Now()
-	activeTokens := make([]jwt.JWT, 0)
+	activeTokens := make([]jwt.Token, 0)
 	tokenFound := false
 
 	for _, t := range user.ActiveTokens {
-		if t.ExpiresAt > now.Unix() {
+		if len(t.Value) > 0 && t.Claims.ExpiresAt > now.Unix() {
 			activeTokens = append(activeTokens, t)
-			if t.Token == token {
+			if t.Value == token {
 				tokenFound = true
 			}
 		}
@@ -108,6 +108,8 @@ func (user *User) IsTokenActive(token string) bool {
 	return tokenFound
 }
 
+// changes the password of a user
+// also invalidates all active tokens
 func (user *User) ChangePassword(newPassword string) {
 	user = GetUserByID(user.ID)
 
@@ -124,7 +126,7 @@ func (user *User) ChangePassword(newPassword string) {
 		bson.M{"$set": bson.M{
 			"passwordHash": string(hash),
 			"updatedAt":    time.Now(),
-			"activeTokens": []jwt.JWT{},
+			"activeTokens": []jwt.Claims{},
 		}},
 	)
 	errs.Invariant(err == nil, "can't update user")

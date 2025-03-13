@@ -9,12 +9,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func CreateJWT(userID primitive.ObjectID) (string, error) {
+// creates a JWT for a user ID
+func CreateJWT(userID primitive.ObjectID) (Token, error) {
 	now := time.Now()
 	expiresAt := now.Add(DEFAULT_EXPIRATION_TIME)
 	id := uuid.New().String()
 
-	jwt := JWT{
+	claims := Claims{
 		Issuer:    DEFAULT_ISSUER,
 		Subject:   userID.Hex(),
 		Audience:  DEFAULT_AUDIENCE,
@@ -24,11 +25,20 @@ func CreateJWT(userID primitive.ObjectID) (string, error) {
 		JWTID:     id,
 	}
 
-	token := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, jwt.ToClaims())
-	return token.SignedString([]byte(global.JWT_SIGNING_KEY))
+	token := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, claims.ToRawClaims())
+	tokenString, err := token.SignedString([]byte(global.JWT_SIGNING_KEY))
+	if err != nil {
+		return Token{}, err
+	}
+
+	return Token{
+		Claims: claims,
+		Value:  tokenString,
+	}, nil
 }
 
-func ValidateJWT(token string) (bool, *JWT) {
+// validate's a token string and returns the token and the claims
+func ValidateJWT(token string) (bool, *Token) {
 	parsedToken, err := jwtv5.Parse(token, func(token *jwtv5.Token) (interface{}, error) {
 		return []byte(global.JWT_SIGNING_KEY), nil
 	}, jwtv5.WithValidMethods([]string{jwtv5.SigningMethodHS256.Name}))
@@ -42,7 +52,7 @@ func ValidateJWT(token string) (bool, *JWT) {
 		return false, nil
 	}
 
-	jwt := &JWT{
+	parsedClaims := Claims{
 		Issuer:    claims["iss"].(string),
 		Subject:   claims["sub"].(string),
 		Audience:  claims["aud"].(string),
@@ -50,19 +60,28 @@ func ValidateJWT(token string) (bool, *JWT) {
 		IssuedAt:  int64(claims["iat"].(float64)),
 		NotBefore: int64(claims["nbf"].(float64)),
 		JWTID:     claims["jti"].(string),
-		Token:     token,
 	}
 
-	return true, jwt
+	if parsedClaims.ExpiresAt < time.Now().Unix() {
+		return false, nil
+	}
+
+	return true, &Token{
+		Claims: parsedClaims,
+		Value:  token,
+	}
 }
 
-func (jwt *JWT) ToClaims() jwtv5.Claims {
+// helper to convert the claims to a raw jwtv5.Claims
+func (jwt *Claims) ToRawClaims() jwtv5.Claims {
 	claims := jwtv5.MapClaims{
 		"iss": jwt.Issuer,
 		"sub": jwt.Subject,
 		"aud": jwt.Audience,
 		"exp": jwt.ExpiresAt,
 		"iat": jwt.IssuedAt,
+		"nbf": jwt.NotBefore,
+		"jti": jwt.JWTID,
 	}
 
 	return claims

@@ -18,17 +18,19 @@ type User struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	Email        string             `bson:"email" json:"email"`
 	PasswordHash string             `bson:"passwordHash" json:"passwordHash"`
-	ActiveTokens []jwt.JWT          `bson:"activeTokens" json:"activeTokens"`
+	ActiveTokens []jwt.Token        `bson:"activeTokens" json:"activeTokens"`
 
 	CreatedAt time.Time `bson:"createdAt" json:"createdAt"`
 	UpdatedAt time.Time `bson:"updatedAt" json:"updatedAt"`
 }
 
+// used for login and create account
 type UserAuth struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
+// used for changing password
 type UserChangePassword struct {
 	OldPassword string `json:"oldPassword"`
 	NewPassword string `json:"newPassword"`

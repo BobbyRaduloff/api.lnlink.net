@@ -15,6 +15,7 @@ const (
 
 func RegisterAuthRoutes(r *gin.Engine) {
 	r.POST("/api/auth/login", LoginUser)
+	r.PATCH("/api/auth/password", AuthMiddleware(), ChangePassword)
 }
 
 func LoginUser(c *gin.Context) {
@@ -36,9 +37,9 @@ func LoginUser(c *gin.Context) {
 		return
 	}
 
-	user.AddActiveToken(jwt)
+	user.AddActiveToken(&jwt)
 
-	c.JSON(http.StatusOK, gin.H{"accessToken": jwt})
+	c.JSON(http.StatusOK, gin.H{"accessToken": jwt.Value})
 }
 
 func ChangePassword(c *gin.Context) {
@@ -93,32 +94,38 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		userID, err := primitive.ObjectIDFromHex(jwtToken.Subject)
+		userID, err := primitive.ObjectIDFromHex(jwtToken.Claims.Subject)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token subject is not a valid object ID"})
 			c.Abort()
 			return
 		}
 
 		user := user.GetUserByID(userID)
 		if user == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			c.Abort()
 			return
 		}
 
 		if len(user.ActiveTokens) == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User has no active tokens"})
 			c.Abort()
 			return
 		}
 
+		foundActiveToken := false
 		for _, token := range user.ActiveTokens {
-			if token.Token == jwtToken.Token {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
-				c.Abort()
-				return
+			if token.Value == jwtToken.Value {
+				foundActiveToken = true
+				break
 			}
+		}
+
+		if !foundActiveToken {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token is not active"})
+			c.Abort()
+			return
 		}
 
 		c.Set(UserIDKey, userID)
