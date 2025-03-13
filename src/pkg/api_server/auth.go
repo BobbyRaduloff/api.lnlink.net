@@ -41,6 +41,34 @@ func LoginUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"accessToken": jwt})
 }
 
+func ChangePassword(c *gin.Context) {
+	var userChangePassword user.UserChangePassword
+	if err := c.ShouldBindJSON(&userChangePassword); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	userID := GetUserID(c)
+	currentUser := user.GetUserByID(userID)
+	if currentUser == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
+		c.Abort()
+		return
+	}
+
+	success, currentUser := user.AuthenticateUser(&user.UserAuth{
+		Email:    currentUser.Email,
+		Password: userChangePassword.OldPassword,
+	})
+	if !success {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid old password"})
+		return
+	}
+
+	currentUser.ChangePassword(userChangePassword.NewPassword)
+	c.JSON(http.StatusOK, gin.H{"message": "Password changed"})
+}
+
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
