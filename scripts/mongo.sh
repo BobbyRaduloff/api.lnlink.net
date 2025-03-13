@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MONGO_DB=api.codprotect.app
+MONGO_DB=api-lnlink-app
 USERNAME=admin
 PASSWORD=admin
 VOLUME=~/docker/$MONGO_DB/mongo/data

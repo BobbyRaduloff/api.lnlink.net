@@ -34,11 +34,11 @@ func SendEmail(recipient string, subject string, html string, text string) error
 	for _, sec := range intervals {
 		time.Sleep(sec * time.Second)
 		resp2, err := client.Emails.Get(resp.Id)
-		errs.Invariant(err == nil, "неуспешно получаване на статуса на имейла от resend")
+		errs.Invariant(err == nil, "failed to get email status from resend")
 		if resp2.LastEvent == "delivered" {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("неуспешно доставяне на имейл в рамките на 1 минута таймаут")
+	return fmt.Errorf("failed to deliver email within 1 minute timeout")
 }

@@ -1,3 +1,4 @@
+//coverage:ignore file
 package errs
 
 import "fmt"

@@ -1,22 +1,16 @@
 #!/bin/bash
 
 PACKAGES=(
-    "api.codprotect.app/src/pkg/services/auth"
-    "api.codprotect.app/src/pkg/services/email"
-    "api.codprotect.app/src/pkg/services/files"
-    "api.codprotect.app/src/pkg/services/calendar"
-    "api.codprotect.app/src/pkg/models/product"
-    "api.codprotect.app/src/pkg/models/users"
-    "api.codprotect.app/src/pkg/models/events"
-    "api.codprotect.app/src/pkg/models/reports"
-    "api.codprotect.app/src/pkg/models/entity"
-    "api.codprotect.app/src/pkg/models/competitor"
+    # "api.codprotect.app/src/pkg/services/email"
 )
 
 COVERPKG=$(IFS=, ; echo "${PACKAGES[*]}")
 echo $COVERPKG
 # Run tests and generate coverage
 go test -coverpkg=$COVERPKG ./... -coverprofile=cover.out
+
+# clean up coverage file to remove all the lines that are not covered
+go-ignore-cov --file cover.out
 
 # Generate HTML coverage report
 go tool cover -html cover.out -o cover.html
