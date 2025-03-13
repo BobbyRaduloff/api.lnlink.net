@@ -131,3 +131,24 @@ func (user *User) ChangePassword(newPassword string) {
 	)
 	errs.Invariant(err == nil, "can't update user")
 }
+
+// removes an active token from a user
+// used to logout of one device
+func (user *User) RemoveActiveToken(token string) {
+	user = GetUserByID(user.ID)
+
+	user.ActiveTokens = make([]jwt.Token, 0)
+	for _, t := range user.ActiveTokens {
+		if t.Value != token {
+			user.ActiveTokens = append(user.ActiveTokens, t)
+		}
+	}
+
+	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
+	_, err := collection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": user.ID},
+		bson.M{"$set": bson.M{"activeTokens": user.ActiveTokens}},
+	)
+	errs.Invariant(err == nil, "can't update user")
+}

@@ -11,11 +11,13 @@ import (
 
 const (
 	UserIDKey = "userID"
+	TokenKey  = "token"
 )
 
 func RegisterAuthRoutes(r *gin.Engine) {
 	r.POST("/api/auth/login", LoginUser)
 	r.PATCH("/api/auth/password", AuthMiddleware(), ChangePassword)
+	r.DELETE("/api/auth/logout", AuthMiddleware(), LogoutUser)
 }
 
 func LoginUser(c *gin.Context) {
@@ -40,6 +42,12 @@ func LoginUser(c *gin.Context) {
 	user.AddActiveToken(&jwt)
 
 	c.JSON(http.StatusOK, gin.H{"accessToken": jwt.Value})
+}
+
+func LogoutUser(c *gin.Context) {
+	userID := GetUserID(c)
+	user.GetUserByID(userID).RemoveActiveToken(GetToken(c))
+	c.JSON(http.StatusOK, gin.H{"message": "Ok"})
 }
 
 func ChangePassword(c *gin.Context) {
@@ -129,6 +137,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		c.Set(UserIDKey, userID)
+		c.Set(TokenKey, token)
 
 		c.Next()
 	}
@@ -140,4 +149,12 @@ func GetUserID(c *gin.Context) primitive.ObjectID {
 		return primitive.NilObjectID
 	}
 	return userID.(primitive.ObjectID)
+}
+
+func GetToken(c *gin.Context) string {
+	token, exists := c.Get(TokenKey)
+	if !exists {
+		return ""
+	}
+	return token.(string)
 }
