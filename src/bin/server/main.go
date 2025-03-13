@@ -1,8 +1,8 @@
 package main
 
 import (
-	"api.codprotect.app/src/pkg/api_server"
-	"api.codprotect.app/src/pkg/global"
+	"api.lnlink.net/src/pkg/api_server"
+	"api.lnlink.net/src/pkg/global"
 
 	"github.com/gin-contrib/cors"
 )

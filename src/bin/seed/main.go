@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 
-	"api.codprotect.app/src/pkg/global"
+	"api.lnlink.net/src/pkg/global"
+	"api.lnlink.net/src/pkg/models/user"
 )
 
 func main() {
@@ -11,5 +12,10 @@ func main() {
 
 	global.Init()
 	defer global.MONGO_CLIENT.Disconnect(ctx)
+
+	user.CreateUser(&user.UserAuth{
+		Email:    "boris@lnlink.net",
+		Password: "admin",
+	})
 
 }

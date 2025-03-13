@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"api.codprotect.app/src/pkg/errs"
+	"api.lnlink.net/src/pkg/errs"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,6 +30,9 @@ func Init() {
 
 	RESEND_API_KEY = os.Getenv("RESEND_API_KEY")
 	errs.Invariant(len(RESEND_API_KEY) != 0, ".env file doesn't have RESEND_API_KEY")
+
+	JWT_SIGNING_KEY = os.Getenv("JWT_SIGNING_KEY")
+	errs.Invariant(len(JWT_SIGNING_KEY) != 0, ".env file doesn't have JWT_SIGNING_KEY")
 
 	// connect to db
 	MONGO_CLIENT, err = mongo.Connect(context.Background(), options.Client().ApplyURI(MONGO_DB_URI))

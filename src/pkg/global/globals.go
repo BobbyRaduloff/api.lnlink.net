@@ -10,6 +10,7 @@ var MONGO_DB_URI = ""
 var MONGO_DB_NAME = ""
 var RESEND_API_KEY = ""
 var RESEND_FROM = ""
+var JWT_SIGNING_KEY = ""
 
 // mongo
 var MONGO_CLIENT *mongo.Client

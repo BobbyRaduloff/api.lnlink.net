@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"api.codprotect.app/src/pkg/errs"
-	"api.codprotect.app/src/pkg/global"
+	"api.lnlink.net/src/pkg/errs"
+	"api.lnlink.net/src/pkg/global"
 
 	"github.com/resend/resend-go/v2"
 )

@@ -5,5 +5,5 @@ import (
 )
 
 func RegisterAllRoutes(r *gin.Engine) {
-
+	RegisterAuthRoutes(r)
 }
