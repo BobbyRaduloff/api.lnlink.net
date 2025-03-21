@@ -5,6 +5,7 @@ import (
 
 	"api.lnlink.net/src/pkg/models/jwt"
 	"api.lnlink.net/src/pkg/models/user"
+	"api.lnlink.net/src/pkg/services/stripe"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -18,6 +19,25 @@ func RegisterAuthRoutes(r *gin.Engine) {
 	r.POST("/api/auth/login", LoginUser)
 	r.PATCH("/api/auth/password", AuthMiddleware(), ChangePassword)
 	r.DELETE("/api/auth/logout", AuthMiddleware(), LogoutUser)
+	r.GET("/api/auth/me", AuthMiddleware(), GetCurrentUser)
+	r.GET("/api/auth/portal", AuthMiddleware(), GetPortalSession)
+}
+
+func GetPortalSession(c *gin.Context) {
+	userID := GetUserID(c)
+	user := user.GetUserByID(userID)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+
+	portalSession, err := stripe.GetPortalSession(user.StripeCustomerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"portalSession": portalSession})
 }
 
 func LoginUser(c *gin.Context) {
@@ -157,4 +177,24 @@ func GetToken(c *gin.Context) string {
 		return ""
 	}
 	return token.(string)
+}
+
+func GetCurrentUser(c *gin.Context) {
+	userID := GetUserID(c)
+	currentUser := user.GetUserByID(userID)
+	if currentUser == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+
+	response := gin.H{
+		"id":               currentUser.ID,
+		"email":            currentUser.Email,
+		"stripeCustomerID": currentUser.StripeCustomerID,
+		"tokensAvailable":  currentUser.TokensAvailable,
+		"createdAt":        currentUser.CreatedAt,
+		"updatedAt":        currentUser.UpdatedAt,
+	}
+
+	c.JSON(http.StatusOK, response)
 }

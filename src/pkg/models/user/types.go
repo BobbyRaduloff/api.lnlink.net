@@ -20,6 +20,9 @@ type User struct {
 	PasswordHash string             `bson:"passwordHash" json:"passwordHash"`
 	ActiveTokens []jwt.Token        `bson:"activeTokens" json:"activeTokens"`
 
+	StripeCustomerID string `bson:"stripeCustomerID" json:"stripeCustomerID"`
+	TokensAvailable  int    `bson:"tokensAvailable" json:"tokensAvailable"`
+
 	CreatedAt time.Time `bson:"createdAt" json:"createdAt"`
 	UpdatedAt time.Time `bson:"updatedAt" json:"updatedAt"`
 }

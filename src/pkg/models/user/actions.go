@@ -7,6 +7,7 @@ import (
 	"api.lnlink.net/src/pkg/errs"
 	"api.lnlink.net/src/pkg/global"
 	"api.lnlink.net/src/pkg/models/jwt"
+	"api.lnlink.net/src/pkg/services/stripe"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
@@ -16,20 +17,24 @@ import (
 func CreateUser(userAuth *UserAuth) User {
 	hash, err := bcrypt.GenerateFromPassword([]byte(userAuth.Password), bcrypt.DefaultCost)
 	errs.Invariant(err == nil, "can't hash password")
+	stripe_customer_id, err := stripe.CreateCustomer(userAuth.Email)
+	errs.Invariant(err == nil, "can't create stripe customer")
 
 	user := User{
-		Email:        userAuth.Email,
-		PasswordHash: string(hash),
-		ActiveTokens: []jwt.Token{},
+		Email:            userAuth.Email,
+		PasswordHash:     string(hash),
+		ActiveTokens:     []jwt.Token{},
+		StripeCustomerID: stripe_customer_id,
+		TokensAvailable:  10,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 
 	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
 	result, err := collection.InsertOne(context.Background(), user)
-	errs.Invariant(err == nil, "can't create user")
+	errs.Invariant(err == nil, "can't create user", err)
 
 	user.ID = result.InsertedID.(primitive.ObjectID)
-	user.CreatedAt = time.Now()
-	user.UpdatedAt = time.Now()
 
 	return user
 }
@@ -45,6 +50,28 @@ func GetUserByID(userID primitive.ObjectID) *User {
 	}
 
 	return &user
+}
+
+func GetUserByStripeCustomerID(stripeCustomerID string) *User {
+	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
+
+	var user User
+	err := collection.FindOne(context.Background(), bson.M{"stripeCustomerID": stripeCustomerID}).Decode(&user)
+	if err != nil {
+		return nil
+	}
+
+	return &user
+}
+
+func (user *User) AddTokens(tokens int) {
+	user = GetUserByID(user.ID)
+
+	user.TokensAvailable += tokens
+
+	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
+	_, err := collection.UpdateOne(context.Background(), bson.M{"_id": user.ID}, bson.M{"$set": bson.M{"tokensAvailable": user.TokensAvailable}})
+	errs.Invariant(err == nil, "can't update user")
 }
 
 // only check password, no JWT

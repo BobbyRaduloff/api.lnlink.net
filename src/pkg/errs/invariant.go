@@ -3,8 +3,8 @@ package errs
 
 import "fmt"
 
-func Invariant(condition bool, message string) {
+func Invariant(condition bool, message string, args ...interface{}) {
 	if !condition {
-		panic(fmt.Sprintf("Invariant failed: %s", message))
+		panic(fmt.Sprintf("Invariant failed: "+message, args...))
 	}
 }

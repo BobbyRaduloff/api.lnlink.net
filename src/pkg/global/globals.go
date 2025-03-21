@@ -11,6 +11,11 @@ var MONGO_DB_NAME = ""
 var RESEND_API_KEY = ""
 var RESEND_FROM = ""
 var JWT_SIGNING_KEY = ""
+var STRIPE_SECRET_KEY = ""
+var TOKENS_10_ID = ""
+var TOKENS_100_ID = ""
+var TOKENS_1000_ID = ""
+var SUCCESS_URL = ""
 
 // mongo
 var MONGO_CLIENT *mongo.Client
