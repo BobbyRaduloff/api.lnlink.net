@@ -8,4 +8,5 @@ func RegisterAllRoutes(r *gin.Engine) {
 	RegisterAuthRoutes(r)
 	RegisterPurchasingRoutes(r)
 	RegisterWebhookRoutes(r)
+	RegisterExperimentRoutes(r)
 }

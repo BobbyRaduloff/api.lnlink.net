@@ -22,6 +22,7 @@ type User struct {
 
 	StripeCustomerID string `bson:"stripeCustomerID" json:"stripeCustomerID"`
 	TokensAvailable  int    `bson:"tokensAvailable" json:"tokensAvailable"`
+	ModelType        string `bson:"modelType" json:"modelType"`
 
 	CreatedAt time.Time `bson:"createdAt" json:"createdAt"`
 	UpdatedAt time.Time `bson:"updatedAt" json:"updatedAt"`

@@ -16,6 +16,6 @@ func main() {
 	user.CreateUser(&user.UserAuth{
 		Email:    "boris@lnlink.net",
 		Password: "admin",
-	})
+	}, "innocent")
 
 }

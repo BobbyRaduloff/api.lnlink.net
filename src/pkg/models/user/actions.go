@@ -14,7 +14,7 @@ import (
 )
 
 // creates a user, nothing to do with the auth
-func CreateUser(userAuth *UserAuth) User {
+func CreateUser(userAuth *UserAuth, modelType string) User {
 	hash, err := bcrypt.GenerateFromPassword([]byte(userAuth.Password), bcrypt.DefaultCost)
 	errs.Invariant(err == nil, "can't hash password")
 	stripe_customer_id, err := stripe.CreateCustomer(userAuth.Email)
@@ -26,6 +26,7 @@ func CreateUser(userAuth *UserAuth) User {
 		ActiveTokens:     []jwt.Token{},
 		StripeCustomerID: stripe_customer_id,
 		TokensAvailable:  10,
+		ModelType:        modelType,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
 	}

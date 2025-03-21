@@ -50,6 +50,26 @@ func Init() {
 	SUCCESS_URL = os.Getenv("SUCCESS_URL")
 	errs.Invariant(len(SUCCESS_URL) != 0, ".env file doesn't have SUCCESS_URL")
 
+	RUNPOD_API_KEY = os.Getenv("RUNPOD_API_KEY")
+	errs.Invariant(len(RUNPOD_API_KEY) != 0, ".env file doesn't have RUNPOD_API_KEY")
+
+	S3_REGION = os.Getenv("S3_REGION")
+	errs.Invariant(len(S3_REGION) != 0, ".env file doesn't have S3_REGION")
+
+	S3_ACCESS_KEY_ID = os.Getenv("S3_ACCESS_KEY_ID")
+	errs.Invariant(len(S3_ACCESS_KEY_ID) != 0, ".env file doesn't have S3_ACCESS_KEY_ID")
+
+	S3_SECRET_ACCESS_KEY = os.Getenv("S3_SECRET_ACCESS_KEY")
+	errs.Invariant(len(S3_SECRET_ACCESS_KEY) != 0, ".env file doesn't have S3_SECRET_ACCESS_KEY")
+
+	S3_INPUT_BUCKET_NAME = os.Getenv("S3_INPUT_BUCKET_NAME")
+	errs.Invariant(len(S3_INPUT_BUCKET_NAME) != 0, ".env file doesn't have S3_INPUT_BUCKET_NAME")
+
+	S3_OUTPUT_BUCKET_NAME = os.Getenv("S3_OUTPUT_BUCKET_NAME")
+	errs.Invariant(len(S3_OUTPUT_BUCKET_NAME) != 0, ".env file doesn't have S3_OUTPUT_BUCKET_NAME")
+
+	S3_MODEL_BUCKET_NAME = os.Getenv("S3_MODEL_BUCKET_NAME")
+	errs.Invariant(len(S3_MODEL_BUCKET_NAME) != 0, ".env file doesn't have S3_MODEL_BUCKET_NAME")
 	// connect to db
 	MONGO_CLIENT, err = mongo.Connect(context.Background(), options.Client().ApplyURI(MONGO_DB_URI))
 	errs.Invariant(err == nil, "can't connect to mongodb instance")
