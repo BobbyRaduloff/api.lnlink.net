@@ -67,21 +67,15 @@ func UpdateExperimentStatuses() error {
 					multiExp.Experiments[i].Status = experiments.ExperimentCompleted
 					multiExp.Experiments[i].ExecutionTimeMillis = int(math.Ceil(float64(status.InnocentCompletedResponse.ExecutionTime) / 1000))
 
-					// Calculate tokens to deduct (1 token per minute, rounded up)
-					executionMinutes := float64(status.InnocentCompletedResponse.ExecutionTime) / 60000 // Convert ms to minutes
-					tokensToDeduct := int(math.Ceil(executionMinutes))
-
-					log.Printf("[ExperimentStatusCron] Deducting %d tokens for experiment %d (RunPod ID: %s) - execution time: %.2f minutes",
-						tokensToDeduct, i, exp.RunpodID, executionMinutes)
-
-					// Get user and deduct tokens
-					userID := multiExp.UserID
-					user := user.GetUserByID(userID)
+					// Deduct tokens based on model type
+					user := user.GetUserByID(multiExp.UserID)
 					if user != nil {
+						tokensToDeduct := 8 // Default 8 tokens per image
+						if user.ModelType == "innocent" {
+							tokensToDeduct = 16 // 16 tokens per image for innocent model
+						}
 						user.AddTokens(-tokensToDeduct)
-						log.Printf("[ExperimentStatusCron] Successfully deducted %d tokens from user %s", tokensToDeduct, userID)
-					} else {
-						log.Printf("[ExperimentStatusCron] WARNING: Could not find user %s to deduct tokens", userID)
+						log.Printf("[ExperimentStatusCron] Deducted %d tokens from user %s", tokensToDeduct, multiExp.UserID)
 					}
 				} else {
 					log.Printf("[ExperimentStatusCron] WARNING: Status is COMPLETED but no completion data available for experiment %d (RunPod ID: %s)", i, exp.RunpodID)

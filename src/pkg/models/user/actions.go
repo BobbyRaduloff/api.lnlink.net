@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"api.lnlink.net/src/pkg/errs"
@@ -73,6 +74,25 @@ func (user *User) AddTokens(tokens int) {
 	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
 	_, err := collection.UpdateOne(context.Background(), bson.M{"_id": user.ID}, bson.M{"$set": bson.M{"tokensAvailable": user.TokensAvailable}})
 	errs.Invariant(err == nil, "can't update user")
+}
+
+// DeductTokens deducts tokens from the user's available balance
+func (user *User) DeductTokens(tokens int) error {
+	user = GetUserByID(user.ID)
+
+	if user.TokensAvailable < tokens {
+		return fmt.Errorf("insufficient tokens: available %d, required %d", user.TokensAvailable, tokens)
+	}
+
+	user.TokensAvailable -= tokens
+
+	collection := global.MONGO_CLIENT.Database(global.MONGO_DB_NAME).Collection(UserCollection)
+	_, err := collection.UpdateOne(context.Background(), bson.M{"_id": user.ID}, bson.M{"$set": bson.M{"tokensAvailable": user.TokensAvailable}})
+	if err != nil {
+		return fmt.Errorf("failed to update user tokens: %v", err)
+	}
+
+	return nil
 }
 
 // only check password, no JWT
