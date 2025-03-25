@@ -38,8 +38,8 @@ func Init() {
 	STRIPE_SECRET_KEY = os.Getenv("STRIPE_SECRET_KEY")
 	errs.Invariant(len(STRIPE_SECRET_KEY) != 0, ".env file doesn't have STRIPE_SECRET_KEY")
 
-	TOKENS_10_ID = os.Getenv("TOKENS_10_ID")
-	errs.Invariant(len(TOKENS_10_ID) != 0, ".env file doesn't have TOKENS_10_ID")
+	TOKENS_5000_ID = os.Getenv("TOKENS_5000_ID")
+	errs.Invariant(len(TOKENS_5000_ID) != 0, ".env file doesn't have TOKENS_5000_ID")
 
 	TOKENS_100_ID = os.Getenv("TOKENS_100_ID")
 	errs.Invariant(len(TOKENS_100_ID) != 0, ".env file doesn't have TOKENS_100_ID")

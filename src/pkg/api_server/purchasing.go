@@ -17,8 +17,8 @@ func CreateCheckoutSession(c *gin.Context) {
 	var checkoutSession string
 	var err error
 	switch tokens {
-	case "10":
-		checkoutSession, err = stripe.CreateCheckoutSession(user.StripeCustomerID, global.TOKENS_10_ID)
+	case "5000":
+		checkoutSession, err = stripe.CreateCheckoutSession(user.StripeCustomerID, global.TOKENS_5000_ID)
 	case "100":
 		checkoutSession, err = stripe.CreateCheckoutSession(user.StripeCustomerID, global.TOKENS_100_ID)
 	case "1000":

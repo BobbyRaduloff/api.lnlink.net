@@ -75,8 +75,8 @@ func WebhookHandler(c *gin.Context) {
 
 		for _, lineItem := range s.LineItems.Data {
 			id := lineItem.Price.ID
-			if id == global.TOKENS_10_ID {
-				customerUser.AddTokens(10)
+			if id == global.TOKENS_5000_ID {
+				customerUser.AddTokens(5000)
 			} else if id == global.TOKENS_100_ID {
 				customerUser.AddTokens(100)
 			} else if id == global.TOKENS_1000_ID {
