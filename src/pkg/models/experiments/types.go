@@ -21,6 +21,8 @@ type Experiment struct {
 	RunpodID            string           `bson:"runpodID,omitempty" json:"runpodID,omitempty"`
 	ExecutionTimeMillis int              `bson:"executionTimeMillis,omitempty" json:"executionTimeMillis,omitempty"`
 	Status              ExperimentStatus `bson:"status,omitempty" json:"status,omitempty"`
+	RetryCount          int              `bson:"retryCount,omitempty" json:"retryCount,omitempty"`
+	MicronsPerPixel     float64          `bson:"micronsPerPixel,omitempty" json:"micronsPerPixel,omitempty"`
 }
 
 type ExperimentStatus string

@@ -2,6 +2,7 @@ package cron
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"api.lnlink.net/src/pkg/services/models"
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+const MaxRetries = 3
 
 // UpdateExperimentStatuses checks all in-progress experiments and updates their status
 func UpdateExperimentStatuses() error {
@@ -89,10 +92,76 @@ func UpdateExperimentStatuses() error {
 				continue
 			case "FAILED":
 				log.Printf("[ExperimentStatusCron] Experiment %d (RunPod ID: %s) failed", i, exp.RunpodID)
-				multiExp.Experiments[i].Status = experiments.ExperimentFailed
+				if exp.RetryCount < MaxRetries {
+					log.Printf("[ExperimentStatusCron] Retrying experiment %d (RunPod ID: %s) - attempt %d/%d", i, exp.RunpodID, exp.RetryCount+1, MaxRetries)
+
+					// Resubmit the experiment to RunPod
+					requestBody := models.InnocentInputParams{
+						S3Region:             global.S3_REGION,
+						S3AccessKeyID:        global.S3_ACCESS_KEY_ID,
+						S3AccessKeySecret:    global.S3_SECRET_ACCESS_KEY,
+						S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
+						S3InputFilePath:      fmt.Sprintf("innocent/%s", exp.FileID),
+						S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
+						S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", exp.FileID),
+						S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", exp.FileID),
+						S3OutputTablePath:    fmt.Sprintf("innocent/%s.xlsx", exp.FileID),
+						S3ModelBucketName:    global.S3_MODEL_BUCKET_NAME,
+						ModelNames:           []string{"innocent-cells", "innocent-lipids"},
+						NRays:                32,
+						MicronsPerPixel:      exp.MicronsPerPixel,
+					}
+
+					response, err := models.InnocentMakeRequest(requestBody)
+					if err != nil {
+						log.Printf("[ExperimentStatusCron] Error resubmitting experiment %d to RunPod: %v", i, err)
+						multiExp.Experiments[i].Status = experiments.ExperimentFailed
+						continue
+					}
+
+					multiExp.Experiments[i].Status = experiments.ExperimentInProgress
+					multiExp.Experiments[i].RunpodID = response.ID
+					multiExp.Experiments[i].RetryCount++
+				} else {
+					log.Printf("[ExperimentStatusCron] Experiment %d (RunPod ID: %s) failed after %d retries", i, exp.RunpodID, MaxRetries)
+					multiExp.Experiments[i].Status = experiments.ExperimentFailed
+				}
 			default:
 				log.Printf("[ExperimentStatusCron] Experiment %d (RunPod ID: %s) has unknown status: %s", i, exp.RunpodID, status.Status)
-				multiExp.Experiments[i].Status = experiments.ExperimentFailed
+				if exp.RetryCount < MaxRetries {
+					log.Printf("[ExperimentStatusCron] Retrying experiment %d (RunPod ID: %s) - attempt %d/%d", i, exp.RunpodID, exp.RetryCount+1, MaxRetries)
+
+					// Resubmit the experiment to RunPod
+					requestBody := models.InnocentInputParams{
+						S3Region:             global.S3_REGION,
+						S3AccessKeyID:        global.S3_ACCESS_KEY_ID,
+						S3AccessKeySecret:    global.S3_SECRET_ACCESS_KEY,
+						S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
+						S3InputFilePath:      fmt.Sprintf("innocent/%s", exp.FileID),
+						S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
+						S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", exp.FileID),
+						S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", exp.FileID),
+						S3OutputTablePath:    fmt.Sprintf("innocent/%s.xlsx", exp.FileID),
+						S3ModelBucketName:    global.S3_MODEL_BUCKET_NAME,
+						ModelNames:           []string{"innocent-cells", "innocent-lipids"},
+						NRays:                32,
+						MicronsPerPixel:      exp.MicronsPerPixel,
+					}
+
+					response, err := models.InnocentMakeRequest(requestBody)
+					if err != nil {
+						log.Printf("[ExperimentStatusCron] Error resubmitting experiment %d to RunPod: %v", i, err)
+						multiExp.Experiments[i].Status = experiments.ExperimentFailed
+						continue
+					}
+
+					multiExp.Experiments[i].Status = experiments.ExperimentInProgress
+					multiExp.Experiments[i].RunpodID = response.ID
+					multiExp.Experiments[i].RetryCount++
+				} else {
+					log.Printf("[ExperimentStatusCron] Experiment %d (RunPod ID: %s) failed after %d retries", i, exp.RunpodID, MaxRetries)
+					multiExp.Experiments[i].Status = experiments.ExperimentFailed
+				}
 			}
 		}
 
