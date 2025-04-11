@@ -228,7 +228,8 @@ func CreateExperiment(c *gin.Context) {
 
 	// Process each file
 	var uploadedFiles []string
-	for i, file := range files {
+	var experimentIDs []string
+	for _, file := range files {
 		// Check file type
 		ext := filepath.Ext(file.Filename)
 		if ext == "" {
@@ -247,8 +248,12 @@ func CreateExperiment(c *gin.Context) {
 		// Reset reader for upload
 		src.Seek(0, io.SeekStart)
 
-		// Generate unique filename while preserving extension
-		newFilename := fmt.Sprintf("%d%s", i+1, ext)
+		// Generate unique ID for this experiment
+		experimentID := uuid.New().String()
+		experimentIDs = append(experimentIDs, experimentID)
+
+		// Generate filename using the experiment ID
+		newFilename := fmt.Sprintf("%s%s", experimentID, ext)
 		s3Key := fmt.Sprintf("innocent/%s", newFilename)
 
 		// Upload to S3
@@ -268,19 +273,15 @@ func CreateExperiment(c *gin.Context) {
 
 	// Process each uploaded file
 	var responses []*models.InnocentResponse
-	var experimentIDs []string
-	for _, inputFile := range uploadedFiles {
-		// Generate unique ID for this experiment
-		experimentID := uuid.New().String()
-
+	for i, inputFile := range uploadedFiles {
 		// Create experiment with input parameters
 		requestBody := models.InnocentInputParams{
 			S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
 			S3InputFilePath:      inputFile,
 			S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
-			S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", experimentID),
-			S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", experimentID),
-			S3OutputTablePath:    fmt.Sprintf("innocent/%s.xlsx", experimentID),
+			S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", experimentIDs[i]),
+			S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", experimentIDs[i]),
+			S3OutputTablePath:    fmt.Sprintf("innocent/%s.xlsx", experimentIDs[i]),
 			NRays:                32,
 			MicronsPerPixel:      micronsPerPixel,
 		}
@@ -293,7 +294,6 @@ func CreateExperiment(c *gin.Context) {
 		}
 
 		responses = append(responses, response)
-		experimentIDs = append(experimentIDs, experimentID)
 	}
 
 	exps := []experiments.Experiment{}
