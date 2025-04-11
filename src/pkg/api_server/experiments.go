@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"time"
 
 	"api.lnlink.net/src/pkg/global"
@@ -40,125 +39,6 @@ func downloadFromS3(s3Client *s3.Client, bucket, key string) ([]byte, error) {
 	defer result.Body.Close()
 
 	return io.ReadAll(result.Body)
-}
-
-// Helper function to create a zip file containing experiment results
-func createExperimentZip(s3Client *s3.Client, experiment experiments.MultiExperiment) (*bytes.Buffer, error) {
-	buf := new(bytes.Buffer)
-	zipWriter := zip.NewWriter(buf)
-
-	var missingFiles []string
-	var includedFiles []string
-
-	// Use a mutex to protect concurrent writes to the zip writer and file lists
-	var mu sync.Mutex
-
-	// Create a buffered channel to limit concurrent downloads
-	sem := make(chan struct{}, 10) // Allow up to 10 concurrent downloads
-
-	// Create a wait group to wait for all downloads to complete
-	var wg sync.WaitGroup
-
-	// Create error channel to collect errors
-	errChan := make(chan error, 1)
-	done := make(chan bool)
-
-	for _, exp := range experiment.Experiments {
-		log.Printf("Processing experiment with FileID: %s", exp.FileID)
-
-		// Download files concurrently
-		fileTypes := []struct {
-			key      string
-			filename string
-			isArray  bool
-		}{
-			{fmt.Sprintf("innocent/%s.json", exp.FileID), fmt.Sprintf("%s_results.json", exp.FileID), false},
-		}
-
-		// Add mask and table files (both _0 and _1)
-		for i := 0; i <= 1; i++ {
-			maskKey := fmt.Sprintf("innocent/%s_%d.png", exp.FileID, i)
-			tableKey := fmt.Sprintf("innocent/%s_%d.xlsx", exp.FileID, i)
-			fileTypes = append(fileTypes,
-				struct {
-					key, filename string
-					isArray       bool
-				}{
-					maskKey, fmt.Sprintf("%s_mask_%d.png", exp.FileID, i), true,
-				},
-				struct {
-					key, filename string
-					isArray       bool
-				}{
-					tableKey, fmt.Sprintf("%s_table_%d.xlsx", exp.FileID, i), true,
-				},
-			)
-		}
-
-		for _, ft := range fileTypes {
-			wg.Add(1)
-			go func(key, filename string, isArray bool) {
-				defer wg.Done()
-
-				// Acquire semaphore
-				sem <- struct{}{}
-				defer func() { <-sem }()
-
-				if data, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, key); err == nil {
-					mu.Lock()
-					if err := addFileToZip(zipWriter, filename, data); err != nil {
-						select {
-						case errChan <- fmt.Errorf("failed to add file %s: %v", filename, err):
-						default:
-						}
-					} else {
-						desc := "results file"
-						if isArray {
-							desc = filepath.Ext(filename)[1:] + " file"
-						}
-						includedFiles = append(includedFiles, fmt.Sprintf("%s for %s", desc, exp.FileID))
-						log.Printf("Added %s to zip", filename)
-					}
-					mu.Unlock()
-				} else {
-					mu.Lock()
-					missingFiles = append(missingFiles, fmt.Sprintf("%s for %s", filepath.Base(key), exp.FileID))
-					log.Printf("Failed to download file %s: %v", key, err)
-					mu.Unlock()
-				}
-			}(ft.key, ft.filename, ft.isArray)
-		}
-	}
-
-	// Wait for downloads in a goroutine
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	// Wait for either completion or error
-	select {
-	case err := <-errChan:
-		return nil, err
-	case <-done:
-		// All downloads completed successfully
-	}
-
-	if err := zipWriter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close zip writer: %v", err)
-	}
-
-	// Only return an error if no files were included at all
-	if len(includedFiles) == 0 {
-		return nil, fmt.Errorf("no files were found in S3")
-	}
-
-	log.Printf("Successfully created zip file with %d files. Size: %d bytes", len(includedFiles), buf.Len())
-	if len(missingFiles) > 0 {
-		log.Printf("Warning: Some files were missing from S3: %v", missingFiles)
-	}
-
-	return buf, nil
 }
 
 // Helper function to add a file to a zip archive
