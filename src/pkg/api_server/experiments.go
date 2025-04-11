@@ -1,7 +1,6 @@
 package api_server
 
 import (
-	"archive/zip"
 	"context"
 	"fmt"
 	"io"
@@ -23,30 +22,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
-
-// Helper function to download a file from S3
-func downloadFromS3(s3Client *s3.Client, bucket, key string) ([]byte, error) {
-	result, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to download from S3: %v", err)
-	}
-	defer result.Body.Close()
-
-	return io.ReadAll(result.Body)
-}
-
-// Helper function to add a file to a zip archive
-func addFileToZip(zipWriter *zip.Writer, filename string, data []byte) error {
-	writer, err := zipWriter.Create(filename)
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write(data)
-	return err
-}
 
 func CreateExperiment(c *gin.Context) {
 	userID := GetUserID(c)
