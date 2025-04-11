@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"api.lnlink.net/src/pkg/global"
 	"api.lnlink.net/src/pkg/models/experiments"
@@ -20,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -382,28 +384,147 @@ func GetExperimentDownloadLink(c *gin.Context) {
 
 	s3Client := s3.NewFromConfig(cfg)
 
-	// Create the zip file in memory
-	zipBuf, err := createExperimentZip(s3Client, experiment)
+	// Create a zip file in S3
+	zipKey := fmt.Sprintf("downloads/%s.zip", experimentID.Hex())
+
+	// Create a multipart upload
+	createMultipartOutput, err := s3Client.CreateMultipartUpload(c.Request.Context(), &s3.CreateMultipartUploadInput{
+		Bucket: aws.String(global.S3_OUTPUT_BUCKET_NAME),
+		Key:    aws.String(zipKey),
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create zip file: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create multipart upload"})
 		return
 	}
 
-	// Get the complete zip data
-	zipData := zipBuf.Bytes()
-	contentLength := len(zipData)
+	// Create a zip writer that writes directly to S3
+	var parts []types.CompletedPart
+	partNumber := int32(1)
 
-	// Set response headers
-	c.Header("Content-Description", "File Transfer")
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s.zip", experimentID.Hex()))
-	c.Header("Content-Length", fmt.Sprintf("%d", contentLength))
-	c.Header("Content-Transfer-Encoding", "binary")
-	c.Header("Connection", "Keep-Alive")
-	c.Header("Cache-Control", "no-cache")
+	// Create a zip writer that writes to a buffer
+	buf := new(bytes.Buffer)
+	zipWriter := zip.NewWriter(buf)
 
-	// Write the complete zip data
-	c.Data(http.StatusOK, "application/zip", zipData)
+	// Add each experiment's output files to the zip
+	for _, exp := range experiment.Experiments {
+		// Add mask file
+		maskKey := fmt.Sprintf("innocent/%s.png", exp.FileID)
+		maskData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, maskKey)
+		if err == nil {
+			if err := addFileToZip(zipWriter, fmt.Sprintf("%s_mask.png", exp.FileID), maskData); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add mask file to zip"})
+				return
+			}
+		}
+
+		// Add results file
+		resultsKey := fmt.Sprintf("innocent/%s.json", exp.FileID)
+		resultsData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, resultsKey)
+		if err == nil {
+			if err := addFileToZip(zipWriter, fmt.Sprintf("%s_results.json", exp.FileID), resultsData); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add results file to zip"})
+				return
+			}
+		}
+
+		// Add table file
+		tableKey := fmt.Sprintf("innocent/%s.xlsx", exp.FileID)
+		tableData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, tableKey)
+		if err == nil {
+			if err := addFileToZip(zipWriter, fmt.Sprintf("%s_table.xlsx", exp.FileID), tableData); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add table file to zip"})
+				return
+			}
+		}
+
+		// If buffer is getting large, upload it as a part
+		if buf.Len() > 5*1024*1024 { // 5MB chunks
+			if err := zipWriter.Close(); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to close zip writer"})
+				return
+			}
+
+			// Upload the part
+			uploadPartOutput, err := s3Client.UploadPart(c.Request.Context(), &s3.UploadPartInput{
+				Bucket:     aws.String(global.S3_OUTPUT_BUCKET_NAME),
+				Key:        aws.String(zipKey),
+				UploadId:   createMultipartOutput.UploadId,
+				PartNumber: aws.Int32(partNumber),
+				Body:       bytes.NewReader(buf.Bytes()),
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload part"})
+				return
+			}
+
+			parts = append(parts, types.CompletedPart{
+				ETag:       uploadPartOutput.ETag,
+				PartNumber: aws.Int32(partNumber),
+			})
+
+			// Reset buffer and create new zip writer
+			buf.Reset()
+			zipWriter = zip.NewWriter(buf)
+			partNumber++
+		}
+	}
+
+	// Close the final zip writer
+	if err := zipWriter.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to close zip writer"})
+		return
+	}
+
+	// Upload the final part if there's any data
+	if buf.Len() > 0 {
+		uploadPartOutput, err := s3Client.UploadPart(c.Request.Context(), &s3.UploadPartInput{
+			Bucket:     aws.String(global.S3_OUTPUT_BUCKET_NAME),
+			Key:        aws.String(zipKey),
+			UploadId:   createMultipartOutput.UploadId,
+			PartNumber: aws.Int32(partNumber),
+			Body:       bytes.NewReader(buf.Bytes()),
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload final part"})
+			return
+		}
+
+		parts = append(parts, types.CompletedPart{
+			ETag:       uploadPartOutput.ETag,
+			PartNumber: aws.Int32(partNumber),
+		})
+	}
+
+	// Complete the multipart upload
+	_, err = s3Client.CompleteMultipartUpload(c.Request.Context(), &s3.CompleteMultipartUploadInput{
+		Bucket:   aws.String(global.S3_OUTPUT_BUCKET_NAME),
+		Key:      aws.String(zipKey),
+		UploadId: createMultipartOutput.UploadId,
+		MultipartUpload: &types.CompletedMultipartUpload{
+			Parts: parts,
+		},
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to complete multipart upload"})
+		return
+	}
+
+	// Generate presigned URL for the zip file
+	presignClient := s3.NewPresignClient(s3Client)
+	presignResult, err := presignClient.PresignGetObject(c.Request.Context(), &s3.GetObjectInput{
+		Bucket: aws.String(global.S3_OUTPUT_BUCKET_NAME),
+		Key:    aws.String(zipKey),
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = time.Hour * 24 // URL valid for 24 hours
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"downloadUrl": presignResult.URL,
+	})
 }
 
 func RegisterExperimentRoutes(router *gin.Engine) {
