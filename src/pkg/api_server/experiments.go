@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"api.lnlink.net/src/pkg/global"
@@ -267,41 +269,75 @@ func GetExperimentDownloadLink(c *gin.Context) {
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
 
-	// Add each experiment's output files to the zip
-	for _, exp := range experiment.Experiments {
-		// Add mask files (_0 and _1)
-		for i := 0; i <= 1; i++ {
-			maskKey := fmt.Sprintf("innocent/%s_%d.png", exp.FileID, i)
-			maskData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, maskKey)
-			if err == nil {
-				if err := addFileToZip(zipWriter, fmt.Sprintf("%s_mask_%d.png", exp.FileID, i), maskData); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add mask file to zip"})
-					return
-				}
-			}
-		}
+	// Create a channel to collect downloaded files
+	type fileData struct {
+		name string
+		data []byte
+	}
+	fileChan := make(chan fileData, 10)
+	errChan := make(chan error, 1)
+	var wg sync.WaitGroup
 
-		// Add results file
-		resultsKey := fmt.Sprintf("innocent/%s.json", exp.FileID)
-		resultsData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, resultsKey)
-		if err == nil {
-			if err := addFileToZip(zipWriter, fmt.Sprintf("%s_results.json", exp.FileID), resultsData); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add results file to zip"})
+	// Function to download a file and add it to the channel
+	downloadFile := func(key, name string) {
+		defer wg.Done()
+		data, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, key)
+		if err != nil {
+			// Skip missing files instead of failing
+			if strings.Contains(err.Error(), "NoSuchKey") {
 				return
 			}
+			select {
+			case errChan <- fmt.Errorf("failed to download %s: %v", key, err):
+			default:
+			}
+			return
+		}
+		fileChan <- fileData{name: name, data: data}
+	}
+
+	// Start downloading files concurrently
+	for _, exp := range experiment.Experiments {
+		// Download mask files (_0 and _1)
+		for i := 0; i <= 1; i++ {
+			maskKey := fmt.Sprintf("innocent/%s_%d.png", exp.FileID, i)
+			wg.Add(1)
+			go downloadFile(maskKey, fmt.Sprintf("%s_mask_%d.png", exp.FileID, i))
 		}
 
-		// Add table files (_0 and _1)
+		// Download results file
+		resultsKey := fmt.Sprintf("innocent/%s.json", exp.FileID)
+		wg.Add(1)
+		go downloadFile(resultsKey, fmt.Sprintf("%s_results.json", exp.FileID))
+
+		// Download table files (_0 and _1)
 		for i := 0; i <= 1; i++ {
 			tableKey := fmt.Sprintf("innocent/%s_%d.xlsx", exp.FileID, i)
-			tableData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, tableKey)
-			if err == nil {
-				if err := addFileToZip(zipWriter, fmt.Sprintf("%s_table_%d.xlsx", exp.FileID, i), tableData); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add table file to zip"})
-					return
-				}
-			}
+			wg.Add(1)
+			go downloadFile(tableKey, fmt.Sprintf("%s_table_%d.xlsx", exp.FileID, i))
 		}
+	}
+
+	// Wait for all downloads to complete and close the channel
+	go func() {
+		wg.Wait()
+		close(fileChan)
+	}()
+
+	// Add downloaded files to the zip
+	for file := range fileChan {
+		if err := addFileToZip(zipWriter, file.name, file.data); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add %s to zip", file.name)})
+			return
+		}
+	}
+
+	// Check for any errors
+	select {
+	case err := <-errChan:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	default:
 	}
 
 	// Close the zip writer
