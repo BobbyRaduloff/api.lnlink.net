@@ -275,17 +275,12 @@ func CreateExperiment(c *gin.Context) {
 
 		// Create experiment with input parameters
 		requestBody := models.InnocentInputParams{
-			S3Region:             global.S3_REGION,
-			S3AccessKeyID:        global.S3_ACCESS_KEY_ID,
-			S3AccessKeySecret:    global.S3_SECRET_ACCESS_KEY,
 			S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
 			S3InputFilePath:      inputFile,
 			S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
 			S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", experimentID),
 			S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", experimentID),
 			S3OutputTablePath:    fmt.Sprintf("innocent/%s.xlsx", experimentID),
-			S3ModelBucketName:    global.S3_MODEL_BUCKET_NAME,
-			ModelNames:           []string{"innocent-cells", "innocent-lipids"},
 			NRays:                32,
 			MicronsPerPixel:      micronsPerPixel,
 		}
@@ -304,11 +299,9 @@ func CreateExperiment(c *gin.Context) {
 	exps := []experiments.Experiment{}
 	for i, response := range responses {
 		exps = append(exps, experiments.Experiment{
-			FileID:          experimentIDs[i],
-			RunpodID:        response.ID,
-			Status:          experiments.ExperimentInProgress,
-			RetryCount:      0,
-			MicronsPerPixel: micronsPerPixel,
+			FileID:   experimentIDs[i],
+			RunpodID: response.ID,
+			Status:   experiments.ExperimentInProgress,
 		})
 	}
 	exp := experiments.MultiExperiment{

@@ -14,19 +14,14 @@ var GET_URL = "https://api.runpod.ai/v2/d4je3qggs32rgy/status"
 var API_KEY = "r0wnvfq3gxwfzm"
 
 type InnocentInputParams struct {
-	S3Region             string   `json:"s3_region"`
-	S3AccessKeyID        string   `json:"s3_access_key_id"`
-	S3AccessKeySecret    string   `json:"s3_access_key_secret"`
-	S3InputBucketName    string   `json:"s3_input_bucket_name"`
-	S3InputFilePath      string   `json:"s3_input_file_path"`
-	S3OutputBucketName   string   `json:"s3_output_bucket_name"`
-	S3OutputMaskFilePath string   `json:"s3_output_mask_file_path"`
-	S3OutputResultsPath  string   `json:"s3_output_results_file_path"`
-	S3OutputTablePath    string   `json:"s3_output_table_file_path"`
-	S3ModelBucketName    string   `json:"s3_model_bucket_name"`
-	ModelNames           []string `json:"model_names"`
-	NRays                int      `json:"n_rays"`
-	MicronsPerPixel      float64  `json:"microns_per_pixel"`
+	S3InputBucketName    string  `json:"s3_input_bucket_name"`
+	S3InputFilePath      string  `json:"s3_input_file_path"`
+	S3OutputBucketName   string  `json:"s3_output_bucket_name"`
+	S3OutputMaskFilePath string  `json:"s3_output_mask_file_path"`
+	S3OutputResultsPath  string  `json:"s3_output_results_file_path"`
+	S3OutputTablePath    string  `json:"s3_output_table_file_path"`
+	NRays                int     `json:"n_rays"`
+	MicronsPerPixel      float64 `json:"microns_per_pixel"`
 }
 
 type InnocentRequestBody struct {
