@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"time"
 
 	"api.lnlink.net/src/pkg/global"
@@ -21,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -265,51 +263,9 @@ func GetExperimentDownloadLink(c *gin.Context) {
 
 	s3Client := s3.NewFromConfig(cfg)
 
-	// Create a zip file in S3
-	zipKey := fmt.Sprintf("downloads/%s.zip", experimentID.Hex())
-
-	// Create a multipart upload
-	createMultipartOutput, err := s3Client.CreateMultipartUpload(c.Request.Context(), &s3.CreateMultipartUploadInput{
-		Bucket: aws.String(global.S3_OUTPUT_BUCKET_NAME),
-		Key:    aws.String(zipKey),
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create multipart upload"})
-		return
-	}
-
-	// Create a zip writer that writes to a buffer
+	// Create a zip file in memory
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
-
-	// Create a channel to collect parts
-	partsChan := make(chan types.CompletedPart, 10)
-	errChan := make(chan error, 1)
-	var wg sync.WaitGroup
-	partNumber := int32(1)
-
-	// Function to upload a part
-	uploadPart := func(partNumber int32, data []byte) {
-		defer wg.Done()
-		uploadPartOutput, err := s3Client.UploadPart(c.Request.Context(), &s3.UploadPartInput{
-			Bucket:     aws.String(global.S3_OUTPUT_BUCKET_NAME),
-			Key:        aws.String(zipKey),
-			UploadId:   createMultipartOutput.UploadId,
-			PartNumber: aws.Int32(partNumber),
-			Body:       bytes.NewReader(data),
-		})
-		if err != nil {
-			select {
-			case errChan <- fmt.Errorf("failed to upload part %d: %v", partNumber, err):
-			default:
-			}
-			return
-		}
-		partsChan <- types.CompletedPart{
-			ETag:       uploadPartOutput.ETag,
-			PartNumber: aws.Int32(partNumber),
-		}
-	}
 
 	// Add each experiment's output files to the zip
 	for _, exp := range experiment.Experiments {
@@ -346,68 +302,23 @@ func GetExperimentDownloadLink(c *gin.Context) {
 				}
 			}
 		}
-
-		// If buffer is getting large, upload it as a part
-		if buf.Len() > 50*1024*1024 { // 50MB chunks
-			if err := zipWriter.Close(); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to close zip writer"})
-				return
-			}
-
-			// Upload the part concurrently
-			wg.Add(1)
-			go uploadPart(partNumber, buf.Bytes())
-
-			// Reset buffer and create new zip writer
-			buf.Reset()
-			zipWriter = zip.NewWriter(buf)
-			partNumber++
-		}
 	}
 
-	// Close the final zip writer
+	// Close the zip writer
 	if err := zipWriter.Close(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to close zip writer"})
 		return
 	}
 
-	// Upload the final part if there's any data
-	if buf.Len() > 0 {
-		wg.Add(1)
-		go uploadPart(partNumber, buf.Bytes())
-	}
-
-	// Wait for all uploads to complete
-	go func() {
-		wg.Wait()
-		close(partsChan)
-	}()
-
-	// Collect all parts
-	var parts []types.CompletedPart
-	for part := range partsChan {
-		parts = append(parts, part)
-	}
-
-	// Check for any errors
-	select {
-	case err := <-errChan:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	default:
-	}
-
-	// Complete the multipart upload
-	_, err = s3Client.CompleteMultipartUpload(c.Request.Context(), &s3.CompleteMultipartUploadInput{
-		Bucket:   aws.String(global.S3_OUTPUT_BUCKET_NAME),
-		Key:      aws.String(zipKey),
-		UploadId: createMultipartOutput.UploadId,
-		MultipartUpload: &types.CompletedMultipartUpload{
-			Parts: parts,
-		},
+	// Upload the zip file to S3
+	zipKey := fmt.Sprintf("downloads/%s.zip", experimentID.Hex())
+	_, err = s3Client.PutObject(c.Request.Context(), &s3.PutObjectInput{
+		Bucket: aws.String(global.S3_OUTPUT_BUCKET_NAME),
+		Key:    aws.String(zipKey),
+		Body:   bytes.NewReader(buf.Bytes()),
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to complete multipart upload"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload zip file"})
 		return
 	}
 
