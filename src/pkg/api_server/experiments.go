@@ -518,9 +518,13 @@ func GetExperimentDownloadLink(c *gin.Context) {
 		opts.Expires = time.Hour * 24 // URL valid for 24 hours
 	})
 	if err != nil {
+		log.Printf("Failed to generate presigned URL: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL"})
 		return
 	}
+
+	log.Printf("Generated presigned URL: %s", presignResult.URL)
+	log.Printf("URL expires at: %s", time.Now().Add(24*time.Hour).Format(time.RFC3339))
 
 	c.JSON(http.StatusOK, gin.H{
 		"downloadUrl": presignResult.URL,
