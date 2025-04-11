@@ -2,7 +2,6 @@ package api_server
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -10,9 +9,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"strings"
-	"sync"
-	"time"
 
 	"api.lnlink.net/src/pkg/global"
 	"api.lnlink.net/src/pkg/models/experiments"
@@ -249,134 +245,33 @@ func GetExperimentDownloadLink(c *gin.Context) {
 		return
 	}
 
-	// Configure AWS S3 client
-	cfg, err := config.LoadDefaultConfig(c.Request.Context(),
-		config.WithRegion(global.S3_REGION),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			global.S3_ACCESS_KEY_ID,
-			global.S3_SECRET_ACCESS_KEY,
-			"",
-		)),
+	// If download URL is already generated, return it
+	if experiment.DownloadURL != "" {
+		c.JSON(http.StatusOK, gin.H{
+			"downloadUrl": experiment.DownloadURL,
+		})
+		return
+	}
+
+	// Otherwise, generate a new download URL
+	downloadURL, err := experiments.GenerateDownloadLink(experimentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate download URL"})
+		return
+	}
+
+	// Store the generated URL in the database
+	_, err = collection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": experimentID},
+		bson.M{"$set": bson.M{"downloadUrl": downloadURL}},
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to configure AWS"})
-		return
+		log.Printf("Failed to store download URL: %v", err)
 	}
-
-	s3Client := s3.NewFromConfig(cfg)
-
-	// Create a zip file in memory
-	buf := new(bytes.Buffer)
-	zipWriter := zip.NewWriter(buf)
-
-	// Create a channel to collect downloaded files
-	type fileData struct {
-		name string
-		data []byte
-	}
-	fileChan := make(chan fileData, 10)
-	errChan := make(chan error, 1)
-	var wg sync.WaitGroup
-
-	// Function to download a file and add it to the channel
-	downloadFile := func(key, name string) {
-		defer wg.Done()
-		data, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, key)
-		if err != nil {
-			// Skip missing files instead of failing
-			if strings.Contains(err.Error(), "NoSuchKey") {
-				return
-			}
-			select {
-			case errChan <- fmt.Errorf("failed to download %s: %v", key, err):
-			default:
-			}
-			return
-		}
-		fileChan <- fileData{name: name, data: data}
-	}
-
-	// Start downloading files concurrently
-	for _, exp := range experiment.Experiments {
-		// Download mask files (_0 and _1)
-		for i := 0; i <= 1; i++ {
-			maskKey := fmt.Sprintf("innocent/%s_%d.png", exp.FileID, i)
-			wg.Add(1)
-			go downloadFile(maskKey, fmt.Sprintf("%s_mask_%d.png", exp.FileID, i))
-		}
-
-		// Download results file
-		resultsKey := fmt.Sprintf("innocent/%s.json", exp.FileID)
-		wg.Add(1)
-		go downloadFile(resultsKey, fmt.Sprintf("%s_results.json", exp.FileID))
-
-		// Download table files (_0 and _1)
-		for i := 0; i <= 1; i++ {
-			tableKey := fmt.Sprintf("innocent/%s_%d.xlsx", exp.FileID, i)
-			wg.Add(1)
-			go downloadFile(tableKey, fmt.Sprintf("%s_table_%d.xlsx", exp.FileID, i))
-		}
-	}
-
-	// Wait for all downloads to complete and close the channel
-	go func() {
-		wg.Wait()
-		close(fileChan)
-	}()
-
-	// Add downloaded files to the zip
-	for file := range fileChan {
-		if err := addFileToZip(zipWriter, file.name, file.data); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add %s to zip", file.name)})
-			return
-		}
-	}
-
-	// Check for any errors
-	select {
-	case err := <-errChan:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	default:
-	}
-
-	// Close the zip writer
-	if err := zipWriter.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to close zip writer"})
-		return
-	}
-
-	// Upload the zip file to S3
-	zipKey := fmt.Sprintf("downloads/%s.zip", experimentID.Hex())
-	_, err = s3Client.PutObject(c.Request.Context(), &s3.PutObjectInput{
-		Bucket: aws.String(global.S3_OUTPUT_BUCKET_NAME),
-		Key:    aws.String(zipKey),
-		Body:   bytes.NewReader(buf.Bytes()),
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload zip file"})
-		return
-	}
-
-	// Generate presigned URL for the zip file
-	presignClient := s3.NewPresignClient(s3Client)
-	presignResult, err := presignClient.PresignGetObject(c.Request.Context(), &s3.GetObjectInput{
-		Bucket: aws.String(global.S3_OUTPUT_BUCKET_NAME),
-		Key:    aws.String(zipKey),
-	}, func(opts *s3.PresignOptions) {
-		opts.Expires = time.Hour * 24 // URL valid for 24 hours
-	})
-	if err != nil {
-		log.Printf("Failed to generate presigned URL: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL"})
-		return
-	}
-
-	log.Printf("Generated presigned URL: %s", presignResult.URL)
-	log.Printf("URL expires at: %s", time.Now().Add(24*time.Hour).Format(time.RFC3339))
 
 	c.JSON(http.StatusOK, gin.H{
-		"downloadUrl": presignResult.URL,
+		"downloadUrl": downloadURL,
 	})
 }
 

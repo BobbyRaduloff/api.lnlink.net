@@ -155,11 +155,34 @@ func UpdateExperimentStatuses() error {
 			}
 		}
 
+		// Check if all experiments are completed and generate download URL if needed
+		allCompleted := true
+		for _, exp := range multiExp.Experiments {
+			if exp.Status != experiments.ExperimentCompleted {
+				allCompleted = false
+				break
+			}
+		}
+
+		if allCompleted && multiExp.DownloadURL == "" {
+			log.Printf("[ExperimentStatusCron] All experiments completed for group %s, generating download URL", multiExp.ID)
+			downloadURL, err := experiments.GenerateDownloadLink(multiExp.ID)
+			if err != nil {
+				log.Printf("[ExperimentStatusCron] Error generating download URL for group %s: %v", multiExp.ID, err)
+			} else {
+				multiExp.DownloadURL = downloadURL
+				log.Printf("[ExperimentStatusCron] Generated download URL for group %s", multiExp.ID)
+			}
+		}
+
 		// Update the experiment in MongoDB
 		_, err = collection.UpdateOne(
 			context.Background(),
 			bson.M{"_id": multiExp.ID},
-			bson.M{"$set": bson.M{"experiments": multiExp.Experiments}},
+			bson.M{"$set": bson.M{
+				"experiments": multiExp.Experiments,
+				"downloadUrl": multiExp.DownloadURL,
+			}},
 		)
 		if err != nil {
 			log.Printf("[ExperimentStatusCron] Error updating experiment group %s in MongoDB: %v", multiExp.ID, err)

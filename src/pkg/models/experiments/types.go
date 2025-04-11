@@ -14,6 +14,7 @@ type MultiExperiment struct {
 	Name        string             `bson:"name" json:"name"`
 	Experiments []Experiment       `bson:"experiments,omitempty" json:"experiments,omitempty"`
 	CreatedAt   time.Time          `bson:"createdAt,omitempty" json:"createdAt,omitempty"`
+	DownloadURL string             `bson:"downloadUrl,omitempty" json:"downloadUrl,omitempty"`
 }
 
 type Experiment struct {
