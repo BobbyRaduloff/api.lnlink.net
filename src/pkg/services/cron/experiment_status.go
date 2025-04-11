@@ -97,17 +97,12 @@ func UpdateExperimentStatuses() error {
 
 					// Resubmit the experiment to RunPod
 					requestBody := models.InnocentInputParams{
-						S3Region:             global.S3_REGION,
-						S3AccessKeyID:        global.S3_ACCESS_KEY_ID,
-						S3AccessKeySecret:    global.S3_SECRET_ACCESS_KEY,
 						S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
 						S3InputFilePath:      fmt.Sprintf("innocent/%s", exp.FileID),
 						S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
 						S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", exp.FileID),
 						S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", exp.FileID),
 						S3OutputTablePath:    fmt.Sprintf("innocent/%s.xlsx", exp.FileID),
-						S3ModelBucketName:    global.S3_MODEL_BUCKET_NAME,
-						ModelNames:           []string{"innocent-cells", "innocent-lipids"},
 						NRays:                32,
 						MicronsPerPixel:      exp.MicronsPerPixel,
 					}
@@ -133,17 +128,12 @@ func UpdateExperimentStatuses() error {
 
 					// Resubmit the experiment to RunPod
 					requestBody := models.InnocentInputParams{
-						S3Region:             global.S3_REGION,
-						S3AccessKeyID:        global.S3_ACCESS_KEY_ID,
-						S3AccessKeySecret:    global.S3_SECRET_ACCESS_KEY,
 						S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
 						S3InputFilePath:      fmt.Sprintf("innocent/%s", exp.FileID),
 						S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
 						S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", exp.FileID),
 						S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", exp.FileID),
 						S3OutputTablePath:    fmt.Sprintf("innocent/%s.xlsx", exp.FileID),
-						S3ModelBucketName:    global.S3_MODEL_BUCKET_NAME,
-						ModelNames:           []string{"innocent-cells", "innocent-lipids"},
 						NRays:                32,
 						MicronsPerPixel:      exp.MicronsPerPixel,
 					}
