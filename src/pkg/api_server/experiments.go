@@ -407,13 +407,15 @@ func GetExperimentDownloadLink(c *gin.Context) {
 
 	// Add each experiment's output files to the zip
 	for _, exp := range experiment.Experiments {
-		// Add mask file
-		maskKey := fmt.Sprintf("innocent/%s.png", exp.FileID)
-		maskData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, maskKey)
-		if err == nil {
-			if err := addFileToZip(zipWriter, fmt.Sprintf("%s_mask.png", exp.FileID), maskData); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add mask file to zip"})
-				return
+		// Add mask files (_0 and _1)
+		for i := 0; i <= 1; i++ {
+			maskKey := fmt.Sprintf("innocent/%s_%d.png", exp.FileID, i)
+			maskData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, maskKey)
+			if err == nil {
+				if err := addFileToZip(zipWriter, fmt.Sprintf("%s_mask_%d.png", exp.FileID, i), maskData); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add mask file to zip"})
+					return
+				}
 			}
 		}
 
@@ -427,13 +429,15 @@ func GetExperimentDownloadLink(c *gin.Context) {
 			}
 		}
 
-		// Add table file
-		tableKey := fmt.Sprintf("innocent/%s.xlsx", exp.FileID)
-		tableData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, tableKey)
-		if err == nil {
-			if err := addFileToZip(zipWriter, fmt.Sprintf("%s_table.xlsx", exp.FileID), tableData); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add table file to zip"})
-				return
+		// Add table files (_0 and _1)
+		for i := 0; i <= 1; i++ {
+			tableKey := fmt.Sprintf("innocent/%s_%d.xlsx", exp.FileID, i)
+			tableData, err := downloadFromS3(s3Client, global.S3_OUTPUT_BUCKET_NAME, tableKey)
+			if err == nil {
+				if err := addFileToZip(zipWriter, fmt.Sprintf("%s_table_%d.xlsx", exp.FileID, i), tableData); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add table file to zip"})
+					return
+				}
 			}
 		}
 
