@@ -299,9 +299,10 @@ func CreateExperiment(c *gin.Context) {
 	exps := []experiments.Experiment{}
 	for i, response := range responses {
 		exps = append(exps, experiments.Experiment{
-			FileID:   experimentIDs[i],
-			RunpodID: response.ID,
-			Status:   experiments.ExperimentInProgress,
+			FileID:        experimentIDs[i],
+			FileExtension: filepath.Ext(files[i].Filename),
+			RunpodID:      response.ID,
+			Status:        experiments.ExperimentInProgress,
 		})
 	}
 	exp := experiments.MultiExperiment{

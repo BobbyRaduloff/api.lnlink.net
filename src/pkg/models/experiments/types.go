@@ -18,6 +18,7 @@ type MultiExperiment struct {
 
 type Experiment struct {
 	FileID              string           `bson:"fileId,omitempty" json:"fileId,omitempty"`
+	FileExtension       string           `bson:"fileExtension,omitempty" json:"fileExtension,omitempty"`
 	RunpodID            string           `bson:"runpodID,omitempty" json:"runpodID,omitempty"`
 	ExecutionTimeMillis int              `bson:"executionTimeMillis,omitempty" json:"executionTimeMillis,omitempty"`
 	Status              ExperimentStatus `bson:"status,omitempty" json:"status,omitempty"`

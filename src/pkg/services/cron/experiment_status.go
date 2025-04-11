@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"path/filepath"
 	"time"
 
 	"api.lnlink.net/src/pkg/global"
@@ -99,7 +98,7 @@ func UpdateExperimentStatuses() error {
 					// Resubmit the experiment to RunPod
 					requestBody := models.InnocentInputParams{
 						S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
-						S3InputFilePath:      fmt.Sprintf("innocent/%s%s", exp.FileID, filepath.Ext(exp.FileID)),
+						S3InputFilePath:      fmt.Sprintf("innocent/%s%s", exp.FileID, exp.FileExtension),
 						S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
 						S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", exp.FileID),
 						S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", exp.FileID),
@@ -130,7 +129,7 @@ func UpdateExperimentStatuses() error {
 					// Resubmit the experiment to RunPod
 					requestBody := models.InnocentInputParams{
 						S3InputBucketName:    global.S3_INPUT_BUCKET_NAME,
-						S3InputFilePath:      fmt.Sprintf("innocent/%s%s", exp.FileID, filepath.Ext(exp.FileID)),
+						S3InputFilePath:      fmt.Sprintf("innocent/%s%s", exp.FileID, exp.FileExtension),
 						S3OutputBucketName:   global.S3_OUTPUT_BUCKET_NAME,
 						S3OutputMaskFilePath: fmt.Sprintf("innocent/%s.png", exp.FileID),
 						S3OutputResultsPath:  fmt.Sprintf("innocent/%s.json", exp.FileID),
