@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"api.lnlink.net/src/pkg/global"
@@ -277,13 +278,38 @@ func GetExperimentDownloadLink(c *gin.Context) {
 		return
 	}
 
-	// Create a zip writer that writes directly to S3
-	var parts []types.CompletedPart
-	partNumber := int32(1)
-
 	// Create a zip writer that writes to a buffer
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
+
+	// Create a channel to collect parts
+	partsChan := make(chan types.CompletedPart, 10)
+	errChan := make(chan error, 1)
+	var wg sync.WaitGroup
+	partNumber := int32(1)
+
+	// Function to upload a part
+	uploadPart := func(partNumber int32, data []byte) {
+		defer wg.Done()
+		uploadPartOutput, err := s3Client.UploadPart(c.Request.Context(), &s3.UploadPartInput{
+			Bucket:     aws.String(global.S3_OUTPUT_BUCKET_NAME),
+			Key:        aws.String(zipKey),
+			UploadId:   createMultipartOutput.UploadId,
+			PartNumber: aws.Int32(partNumber),
+			Body:       bytes.NewReader(data),
+		})
+		if err != nil {
+			select {
+			case errChan <- fmt.Errorf("failed to upload part %d: %v", partNumber, err):
+			default:
+			}
+			return
+		}
+		partsChan <- types.CompletedPart{
+			ETag:       uploadPartOutput.ETag,
+			PartNumber: aws.Int32(partNumber),
+		}
+	}
 
 	// Add each experiment's output files to the zip
 	for _, exp := range experiment.Experiments {
@@ -322,29 +348,15 @@ func GetExperimentDownloadLink(c *gin.Context) {
 		}
 
 		// If buffer is getting large, upload it as a part
-		if buf.Len() > 5*1024*1024 { // 5MB chunks
+		if buf.Len() > 50*1024*1024 { // 50MB chunks
 			if err := zipWriter.Close(); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to close zip writer"})
 				return
 			}
 
-			// Upload the part
-			uploadPartOutput, err := s3Client.UploadPart(c.Request.Context(), &s3.UploadPartInput{
-				Bucket:     aws.String(global.S3_OUTPUT_BUCKET_NAME),
-				Key:        aws.String(zipKey),
-				UploadId:   createMultipartOutput.UploadId,
-				PartNumber: aws.Int32(partNumber),
-				Body:       bytes.NewReader(buf.Bytes()),
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload part"})
-				return
-			}
-
-			parts = append(parts, types.CompletedPart{
-				ETag:       uploadPartOutput.ETag,
-				PartNumber: aws.Int32(partNumber),
-			})
+			// Upload the part concurrently
+			wg.Add(1)
+			go uploadPart(partNumber, buf.Bytes())
 
 			// Reset buffer and create new zip writer
 			buf.Reset()
@@ -361,22 +373,28 @@ func GetExperimentDownloadLink(c *gin.Context) {
 
 	// Upload the final part if there's any data
 	if buf.Len() > 0 {
-		uploadPartOutput, err := s3Client.UploadPart(c.Request.Context(), &s3.UploadPartInput{
-			Bucket:     aws.String(global.S3_OUTPUT_BUCKET_NAME),
-			Key:        aws.String(zipKey),
-			UploadId:   createMultipartOutput.UploadId,
-			PartNumber: aws.Int32(partNumber),
-			Body:       bytes.NewReader(buf.Bytes()),
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload final part"})
-			return
-		}
+		wg.Add(1)
+		go uploadPart(partNumber, buf.Bytes())
+	}
 
-		parts = append(parts, types.CompletedPart{
-			ETag:       uploadPartOutput.ETag,
-			PartNumber: aws.Int32(partNumber),
-		})
+	// Wait for all uploads to complete
+	go func() {
+		wg.Wait()
+		close(partsChan)
+	}()
+
+	// Collect all parts
+	var parts []types.CompletedPart
+	for part := range partsChan {
+		parts = append(parts, part)
+	}
+
+	// Check for any errors
+	select {
+	case err := <-errChan:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	default:
 	}
 
 	// Complete the multipart upload
